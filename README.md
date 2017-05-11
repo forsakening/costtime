@@ -1,2 +1,2 @@
 # costtime
-measure the costtime of c/c++ code-block
+simple measure the costtime of c/c++ code-block
