@@ -1,33 +1,36 @@
-//create @20170511 by forsakening@sina.cn
+//create @20170511
 #include <time.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "costtime.h"
 
-//COSTTIMEæ¨¡å—æ‰“å°å‡½æ•°
+//COSTTIMEÄ£¿é´òÓ¡º¯Êý
 #define COSTTIME_LOG_DEBUG(fmt,...) printf("[COSTTIME][DEBUG][%s:%d]"fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__);
 #define COSTTIME_LOG_ERROR(fmt,...) printf("[COSTTIME][ERROR][%s:%d]"fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__);
 
+//linux x86 Ô­×ÓËø
+#define ATOMIC_BOOL_COM_SWAP(ptr, old_val, new_val) __sync_bool_compare_and_swap((ptr), (old_val), (new_val))
+
 typedef struct
 {
-	int calcCnt;             //æ€»å…±éœ€è¦è®¡ç®—çš„æ¬¡æ•°
-	int currentCnt;          //å½“å‰å·²ç»è®¡ç®—çš„æ¬¡æ•°
-	struct timespec time_s;  //ç”¨äºŽè®°å½•ä»£ç å—å‰æ—¶é—´æˆ³
-	struct timespec time_d;  //ç”¨äºŽè®°å½•ä»£ç å—åŽæ—¶é—´æˆ³
-	uint64_t max_time;       //ç”¨äºŽè®°å½•ä»£ç å—æ‰§è¡Œçš„æœ€å¤§æ—¶é—´
-	uint64_t min_time;       //ç”¨äºŽè®°å½•ä»£ç å—æ‰§è¡Œçš„æœ€å°æ—¶é—´
-	uint64_t leap;           //ç”¨äºŽè®¡ç®—å½“å‰ä»£ç å—æ‰§è¡Œçš„æ—¶é—´
-	uint64_t total;          //ç”¨äºŽè®¡ç®—æ€»å…±çš„æ‰§è¡Œæ—¶é—´
-	uint64_t avg_time;       //ç”¨äºŽè®¡ç®—ä»£ç å—æ‰§è¡Œçš„å¹³å‡æ—¶é—´ï¼Œns çº³ç§’
-	COSTTIME_CB callBack;    //åˆ°è¾¾ç»Ÿè®¡æ¬¡æ•°åŽï¼Œæ‰§è¡Œå›žè°ƒ
+    int loop;                //±ê¼ÇÊÇ·ñÐèÒªÑ­»·Í³¼Æ
+	int calcCnt;             //×Ü¹²ÐèÒª¼ÆËãµÄ´ÎÊý
+	int currentCnt;          //µ±Ç°ÒÑ¾­¼ÆËãµÄ´ÎÊý
+	struct timespec time_s;  //ÓÃÓÚ¼ÇÂ¼´úÂë¿éÇ°Ê±¼ä´Á
+	struct timespec time_d;  //ÓÃÓÚ¼ÇÂ¼´úÂë¿éºóÊ±¼ä´Á
+	uint64_t max_time;       //ÓÃÓÚ¼ÇÂ¼´úÂë¿éÖ´ÐÐµÄ×î´óÊ±¼ä
+	uint64_t min_time;       //ÓÃÓÚ¼ÇÂ¼´úÂë¿éÖ´ÐÐµÄ×îÐ¡Ê±¼ä
+	uint64_t total;          //ÓÃÓÚ¼ÆËã×Ü¹²µÄÖ´ÐÐÊ±¼ä
+	uint64_t avg_time;       //ÓÃÓÚ¼ÆËã´úÂë¿éÖ´ÐÐµÄÆ½¾ùÊ±¼ä£¬ns ÄÉÃë
+	COSTTIME_CB callBack;    //µ½´ïÍ³¼Æ´ÎÊýºó£¬Ö´ÐÐ»Øµ÷
 }COSTTIME_INFO;
 
-static COSTTIME_INFO g_costtime_info[MAX_COSTTIME_MODULE_NUM] = {0};
+static COSTTIME_INFO g_costtime_info[MAX_COSTTIME_MODULE_NUM];
 static int costtime_module_num;
+static int costtimeLock = 0;
 
-int costtime_init(int moduleID, int calcCnt, COSTTIME_CB callBack)
+int costtime_init(int moduleID, int calcCnt, int loop, COSTTIME_CB callBack)
 {
-	int i;
 	if (NULL == callBack)
 	{
 		COSTTIME_LOG_ERROR("Callback function NULL! \n");
@@ -46,10 +49,11 @@ int costtime_init(int moduleID, int calcCnt, COSTTIME_CB callBack)
 		return -1;
 	}
 
-	g_costtime_info[costtime_module_num].moduleID = moduleID;
-	g_costtime_info[costtime_module_num].calcCnt = calcCnt;
-	g_costtime_info[costtime_module_num].callBack = callBack;
-
+	g_costtime_info[moduleID].loop = loop;
+	g_costtime_info[moduleID].calcCnt = calcCnt;
+	g_costtime_info[moduleID].callBack = callBack;
+	g_costtime_info[moduleID].min_time = 0xffffffff;
+	
 	costtime_module_num++;
 	COSTTIME_LOG_DEBUG("Init Module:%d, CalcCnt:%d Ok, Current CosttimeNum:%d !\n", \
 						moduleID, calcCnt, costtime_module_num);
@@ -67,27 +71,88 @@ void costtime_tag_end(int moduleID)
 	clock_gettime(0, &(g_costtime_info[moduleID].time_d));
 	g_costtime_info[moduleID].currentCnt++;
 
-	//è®¡ç®—ä¸€äº›ç»Ÿè®¡ä¿¡æ¯
+	//¼ÆËãÒ»Ð©Í³¼ÆÐÅÏ¢
+	struct timespec* time_s = &(g_costtime_info[moduleID].time_s);
+	struct timespec* time_d = &(g_costtime_info[moduleID].time_d);
+	uint64_t min_time = g_costtime_info[moduleID].min_time;
+	uint64_t max_time = g_costtime_info[moduleID].max_time;
+	uint64_t leap = ((uint64_t)(time_d->tv_sec)-(uint64_t)(time_s->tv_sec))*1000000000+(uint64_t)(time_d->tv_nsec-time_s->tv_nsec);		
+	if (min_time > leap) 
+		min_time = leap;
 	
+	if (max_time < leap) 
+		max_time = leap;
 
-	//å¦‚æžœå¤§äºŽæ¬¡æ•°ï¼Œè¿›è¡Œå›žè°ƒ
+	g_costtime_info[moduleID].max_time = max_time;
+	g_costtime_info[moduleID].min_time = min_time;
+	g_costtime_info[moduleID].total += leap;
+
+	//Èç¹û´óÓÚ´ÎÊý£¬½øÐÐ»Øµ÷
 	if (g_costtime_info[moduleID].currentCnt >= g_costtime_info[moduleID].calcCnt)
+	{
 		g_costtime_info[moduleID].callBack(moduleID);
+
+		//ÖØÐÂ³õÊ¼»¯
+		if (g_costtime_info[moduleID].loop == 1)
+		{
+			g_costtime_info[moduleID].currentCnt = 0;
+			g_costtime_info[moduleID].total = 0;
+			g_costtime_info[moduleID].max_time = 0;
+			g_costtime_info[moduleID].min_time = 0xffffffff;
+		}
+	}
+	return ;
+}
+
+void costtime_get_stat(int moduleID, COSTTIME_STAT* stat)
+{
+	if (NULL == stat || moduleID >= MAX_COSTTIME_MODULE_NUM)
+		return ;
+
+	stat->calcCnt = g_costtime_info[moduleID].calcCnt;
+	stat->currentCnt = g_costtime_info[moduleID].currentCnt;
+	stat->max_time = g_costtime_info[moduleID].max_time;
+	stat->min_time = g_costtime_info[moduleID].min_time;
+	stat->total = g_costtime_info[moduleID].total;
+	stat->avg_time = g_costtime_info[moduleID].total / g_costtime_info[moduleID].currentCnt;
+
+	return;
+}
+
+//ÎªÒ»¸öhash±íµÄÄ³¸öÍ°¼ÓËø
+void costtime_lock()
+{
+	while(1)
+	{
+		if (ATOMIC_BOOL_COM_SWAP(&costtimeLock, 0, 1))
+			break;
+	}
 
 	return ;
 }
 
-void costtime_get_stat(COSTTIME_STAT* stat)
+//ÊÍ·ÅÒ»¸öhash±íµÄÄ³¸öÍ°Ëø
+void costtime_unlock()
 {
-
+	costtimeLock = 0;	
+	return ;
 }
 
 void costtime_default_callback(int moduleID)
 {
+	COSTTIME_STAT stat;
+	costtime_get_stat(moduleID, &stat);
+
+	costtime_lock();
 	COSTTIME_LOG_DEBUG("=============== Costtime MID:%d Output Start ================== \n", moduleID);
-	COSTTIME_LOG_DEBUG("");
-	COSTTIME_LOG_DEBUG("");
-        COSTTIME_LOG_DEBUG("=============== Costtime MID:%d Output End ================== \n", moduleID);
+	COSTTIME_LOG_DEBUG("Total  Cnt:%20d \n", stat.calcCnt);
+	COSTTIME_LOG_DEBUG("Curr   Cnt:%20d \n", stat.currentCnt);
+	COSTTIME_LOG_DEBUG("Min   Time:%20lu ns \n", stat.min_time);
+	COSTTIME_LOG_DEBUG("Max   Time:%20lu ns \n", stat.max_time);
+	COSTTIME_LOG_DEBUG("Total Time:%20lu ns \n", stat.total);
+	COSTTIME_LOG_DEBUG("Avrg  Time:%20lu ns \n", stat.avg_time);
+    COSTTIME_LOG_DEBUG("=============== Costtime MID:%d Output End ================== \n", moduleID);
+	costtime_unlock();
 	
 	return ;
 }

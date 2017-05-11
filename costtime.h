@@ -25,8 +25,9 @@ typedef void (*COSTTIME_CB)(int moduleID);
 //耗时统计初始化接口，各个使用模块需要统计时初始化一次
 //moduleID - 模块ID，各个模块确保不同,必须 >= 0 小于 MAX_COSTTIME_MODULE_NUM
 //calcCnt  - 本模块统计次数，到达此次数时进行一次计算
+//loop     - 标记达到预定的统计次数后是否继续统计，loop = 1 继续统计
 //callBack - 耗时统计回调函数，当统计次数达到指定时，会调用该回调
-int costtime_init(int moduleID, int calcCnt, COSTTIME_CB callBack);
+int costtime_init(int moduleID, int calcCnt, int loop, COSTTIME_CB callBack);
 
 //在被统计代码段之前调用一次
 void costtime_tag_start(int moduleID);
@@ -35,7 +36,7 @@ void costtime_tag_start(int moduleID);
 void costtime_tag_end(int moduleID);
 
 //在最终之后获取统计信息
-void costtime_get_stat(COSTTIME_STAT* stat);
+void costtime_get_stat(int moduleID, COSTTIME_STAT* stat);
 
 //costtime 模块默认的回调函数
 void costtime_default_callback(int moduleID);
