@@ -1,25 +1,25 @@
-//create @20170511
+//create @20170511 by forsakening@sina.cn
 #include <time.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "costtime.h"
 
-//COSTTIMEÄ£¿é´òÓ¡º¯Êý
+//COSTTIMEæ¨¡å—æ‰“å°å‡½æ•°
 #define COSTTIME_LOG_DEBUG(fmt,...) printf("[COSTTIME][DEBUG][%s:%d]"fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__);
 #define COSTTIME_LOG_ERROR(fmt,...) printf("[COSTTIME][ERROR][%s:%d]"fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__);
 
 typedef struct
 {
-	int calcCnt;             //×Ü¹²ÐèÒª¼ÆËãµÄ´ÎÊý
-	int currentCnt;          //µ±Ç°ÒÑ¾­¼ÆËãµÄ´ÎÊý
-	struct timespec time_s;  //ÓÃÓÚ¼ÇÂ¼´úÂë¿éÇ°Ê±¼ä´Á
-	struct timespec time_d;  //ÓÃÓÚ¼ÇÂ¼´úÂë¿éºóÊ±¼ä´Á
-	uint64_t max_time;       //ÓÃÓÚ¼ÇÂ¼´úÂë¿éÖ´ÐÐµÄ×î´óÊ±¼ä
-	uint64_t min_time;       //ÓÃÓÚ¼ÇÂ¼´úÂë¿éÖ´ÐÐµÄ×îÐ¡Ê±¼ä
-	uint64_t leap;           //ÓÃÓÚ¼ÆËãµ±Ç°´úÂë¿éÖ´ÐÐµÄÊ±¼ä
-	uint64_t total;          //ÓÃÓÚ¼ÆËã×Ü¹²µÄÖ´ÐÐÊ±¼ä
-	uint64_t avg_time;       //ÓÃÓÚ¼ÆËã´úÂë¿éÖ´ÐÐµÄÆ½¾ùÊ±¼ä£¬ns ÄÉÃë
-	COSTTIME_CB callBack;    //µ½´ïÍ³¼Æ´ÎÊýºó£¬Ö´ÐÐ»Øµ÷
+	int calcCnt;             //æ€»å…±éœ€è¦è®¡ç®—çš„æ¬¡æ•°
+	int currentCnt;          //å½“å‰å·²ç»è®¡ç®—çš„æ¬¡æ•°
+	struct timespec time_s;  //ç”¨äºŽè®°å½•ä»£ç å—å‰æ—¶é—´æˆ³
+	struct timespec time_d;  //ç”¨äºŽè®°å½•ä»£ç å—åŽæ—¶é—´æˆ³
+	uint64_t max_time;       //ç”¨äºŽè®°å½•ä»£ç å—æ‰§è¡Œçš„æœ€å¤§æ—¶é—´
+	uint64_t min_time;       //ç”¨äºŽè®°å½•ä»£ç å—æ‰§è¡Œçš„æœ€å°æ—¶é—´
+	uint64_t leap;           //ç”¨äºŽè®¡ç®—å½“å‰ä»£ç å—æ‰§è¡Œçš„æ—¶é—´
+	uint64_t total;          //ç”¨äºŽè®¡ç®—æ€»å…±çš„æ‰§è¡Œæ—¶é—´
+	uint64_t avg_time;       //ç”¨äºŽè®¡ç®—ä»£ç å—æ‰§è¡Œçš„å¹³å‡æ—¶é—´ï¼Œns çº³ç§’
+	COSTTIME_CB callBack;    //åˆ°è¾¾ç»Ÿè®¡æ¬¡æ•°åŽï¼Œæ‰§è¡Œå›žè°ƒ
 }COSTTIME_INFO;
 
 static COSTTIME_INFO g_costtime_info[MAX_COSTTIME_MODULE_NUM] = {0};
@@ -67,10 +67,10 @@ void costtime_tag_end(int moduleID)
 	clock_gettime(0, &(g_costtime_info[moduleID].time_d));
 	g_costtime_info[moduleID].currentCnt++;
 
-	//¼ÆËãÒ»Ð©Í³¼ÆÐÅÏ¢
+	//è®¡ç®—ä¸€äº›ç»Ÿè®¡ä¿¡æ¯
 	
 
-	//Èç¹û´óÓÚ´ÎÊý£¬½øÐÐ»Øµ÷
+	//å¦‚æžœå¤§äºŽæ¬¡æ•°ï¼Œè¿›è¡Œå›žè°ƒ
 	if (g_costtime_info[moduleID].currentCnt >= g_costtime_info[moduleID].calcCnt)
 		g_costtime_info[moduleID].callBack(moduleID);
 
@@ -87,7 +87,7 @@ void costtime_default_callback(int moduleID)
 	COSTTIME_LOG_DEBUG("=============== Costtime MID:%d Output Start ================== \n", moduleID);
 	COSTTIME_LOG_DEBUG("");
 	COSTTIME_LOG_DEBUG("");
-    COSTTIME_LOG_DEBUG("=============== Costtime MID:%d Output End ================== \n", moduleID);
+        COSTTIME_LOG_DEBUG("=============== Costtime MID:%d Output End ================== \n", moduleID);
 	
 	return ;
 }
